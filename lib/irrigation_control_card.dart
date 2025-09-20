@@ -2,7 +2,9 @@ import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
 
 class IrrigationControlCard extends StatefulWidget {
-  const IrrigationControlCard({super.key});
+  final void Function(bool)? onValveToggled;
+
+  const IrrigationControlCard({super.key, this.onValveToggled});
 
   @override
   State<IrrigationControlCard> createState() => _IrrigationControlCardState();
@@ -24,7 +26,9 @@ class _IrrigationControlCardState extends State<IrrigationControlCard> {
     });
     _database.child('system/valveOpen').onValue.listen((event) {
       if (event.snapshot.exists) {
-        _valveStatus.value = event.snapshot.value as bool;
+        final newStatus = event.snapshot.value as bool;
+        _valveStatus.value = newStatus;
+        widget.onValveToggled?.call(newStatus);
       }
     });
   }
@@ -42,11 +46,13 @@ class _IrrigationControlCardState extends State<IrrigationControlCard> {
       context: context,
       initialTime: TimeOfDay.now(),
     );
+
     if (!mounted) return;
+
     if (picked != null) {
       _database.child('system/timer').set(picked.format(context));
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Irrigation scheduled for ${picked.format(context)}')),
+        SnackBar(content: Text('Irrigation scheduled for ${picked.format(context)}')), 
       );
     }
   }

@@ -1,12 +1,12 @@
 import 'dart:async';
-import 'dart:developer' as developer;
-import 'package:firebase_core/firebase_core.dart';
 import 'dart:math';
 
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
-import 'package:myapp/irrigation_control_card.dart';
-import 'package:myapp/water_tank_card.dart';
+import 'package:myapp/services/notification_service.dart';
+
+import 'irrigation_control_card.dart';
+import 'water_tank_card.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -16,185 +16,217 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  String _temperature = '--';
-  String _humidity = '--';
-  String _waterTankLevel = '--';
-  String? _selectedCrop;
-  String _irrigationSuggestion = "Select a crop to get suggestions.";
-
   final DatabaseReference _database = FirebaseDatabase.instanceFor(
     app: FirebaseDatabase.instance.app,
     databaseURL: "https://agrosmart-f1233-default-rtdb.asia-southeast1.firebasedatabase.app/",
   ).ref();
 
-  late StreamSubscription<DatabaseEvent> _sensorSubscription;
+  StreamSubscription<DatabaseEvent>? _sensorSubscription;
+  final NotificationService _notificationService = NotificationService();
+
+  String? _selectedCrop;
+  String _irrigationSuggestion = "Select a crop to get a suggestion.";
+
+  // State variables for sensor and crop data
+  Map<dynamic, dynamic>? _crops;
+  double _waterLevel = 0.0;
+  num _temperature = 0;
+  num _humidity = 0;
+  String _status = 'N/A';
 
   // Simulation variables
   Timer? _simulationTimer;
   double _simulatedSoilMoisture = 70.0;
   bool _isValveOpen = false;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _checkAndCreateCropsData();
+    _loadInitialData();
     _listenToSensorData();
     _startSimulation();
   }
 
+  Future<void> _loadInitialData() async {
+    await _checkAndCreateCropsData();
+    final snapshot = await _database.child('crops').get();
+    if (snapshot.exists) {
+      if (mounted) {
+        setState(() {
+          _crops = snapshot.value as Map<dynamic, dynamic>?;
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   void _startSimulation() {
     _simulationTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
-      setState(() {
-        if (_isValveOpen) {
-          _simulatedSoilMoisture = min(100, _simulatedSoilMoisture + 2);
-        } else {
-          _simulatedSoilMoisture = max(0, _simulatedSoilMoisture - 1);
-        }
-      });
+      if (mounted) {
+        setState(() {
+          if (_isValveOpen) {
+            _simulatedSoilMoisture = min(100, _simulatedSoilMoisture + 2);
+          } else {
+            _simulatedSoilMoisture = max(0, _simulatedSoilMoisture - 1);
+          }
+        });
+      }
     });
   }
 
   void _listenToSensorData() {
     _sensorSubscription = _database.child('SensorData').onValue.listen((event) {
       final data = event.snapshot.value as Map<dynamic, dynamic>?;
-      if (data != null) {
+      if (data != null && mounted) {
         final distance = data['Distance'] ?? 0;
         final double waterLevel = (1.0 - (distance / 30.0)).clamp(0.0, 1.0) * 100.0;
-
+        
         setState(() {
-          _temperature = data['Temperature']?.toString() ?? '--';
-          _humidity = data['Humidity']?.toString() ?? '--';
-          _waterTankLevel = waterLevel.toStringAsFixed(1);
+          _waterLevel = waterLevel;
+          _temperature = data['Temperature'] ?? 0;
+          _humidity = data['Humidity'] ?? 0;
+          _status = data['status'] ?? 'N/A';
         });
+
+        if (waterLevel < 20) {
+          _notificationService.showNotification(
+            'Low Water Level',
+            'Water tank level is critically low: ${waterLevel.toStringAsFixed(1)}%',
+          );
+        }
       }
-    }, onError: (error) {
-      developer.log('Error listening to Firebase: $error');
     });
   }
 
   Future<void> _checkAndCreateCropsData() async {
     final snapshot = await _database.child('crops').get();
-    if (!snapshot.exists) {
+    if (!snapshot.exists || snapshot.value == null) {
       await _database.child('crops').set({
-        'wheat': {
-          'minMoisture': 30,
-          'maxMoisture': 60,
-          'minTemp': 10,
-          'maxTemp': 25,
+        "Tomato": {
+          "minMoisture": 60,
+          "maxMoisture": 80,
+          "minTemp": 21,
+          "maxTemp": 29,
+          "watering_frequency": "Every 2-3 days"
         },
-        'corn': {
-          'minMoisture': 50,
-          'maxMoisture': 80,
-          'minTemp': 20,
-          'maxTemp': 35,
+        "Lettuce": {
+          "minMoisture": 50,
+          "maxMoisture": 70,
+          "minTemp": 15,
+          "maxTemp": 22,
+          "watering_frequency": "Every 1-2 days"
+        },
+        "Bell Pepper": {
+          "minMoisture": 55,
+          "maxMoisture": 75,
+          "minTemp": 23,
+          "maxTemp": 32,
+          "watering_frequency": "Every 2-3 days"
         }
       });
     }
   }
 
-
-  @override
-  void dispose() {
-    _sensorSubscription.cancel();
-    _simulationTimer?.cancel();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Smart Irrigation Dashboard')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: const [
+              CircularProgressIndicator(),
+              SizedBox(height: 20),
+              Text('Fetching initial data...'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Create a snapshot-like map for the suggestion function
+    final sensors = {
+      'Temperature': _temperature,
+      'Humidity': _humidity,
+    };
+    
+    if (_crops != null && _selectedCrop != null) {
+      final selectedCropData = _crops![_selectedCrop] as Map<dynamic, dynamic>?;
+      if (selectedCropData != null) {
+        _getIrrigationSuggestion(sensors, selectedCropData);
+      }
+    }
+
     return Scaffold(
       appBar: AppBar(title: const Text('Smart Irrigation Dashboard')),
-      body: StreamBuilder<DatabaseEvent>(
-        stream: _database.onValue,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 20),
-                  Text('Fetching data...'),
-                ],
-              ),
-            );
-          }
-          if (snapshot.hasData &&
-              !snapshot.hasError &&
-              snapshot.data!.snapshot.value != null) {
-            final data =
-                snapshot.data!.snapshot.value as Map<dynamic, dynamic>;
-            final crops = data['crops'] as Map<dynamic, dynamic>?;
-            final sensors = data['SensorData'] as Map<dynamic, dynamic>?;
-
-            if (sensors == null) {
-              return const Center(
-                child: Text(
-                    "Waiting for sensor data... Ensure your device is connected."),
-              );
-            }
-
-            final distance = sensors['Distance'] ?? 0;
-            final double waterLevel = (1.0 - (distance / 30.0)).clamp(0.0, 1.0) * 100.0;
-
-            if (crops != null && _selectedCrop != null) {
-              final selectedCropData =
-                  crops[_selectedCrop] as Map<dynamic, dynamic>?;
-              if (selectedCropData != null) {
-                _getIrrigationSuggestion(sensors, selectedCropData);
+      body: ListView(
+        padding: const EdgeInsets.all(16.0),
+        children: [
+          if (_crops != null) _buildCropSelector(_crops!),
+          const SizedBox(height: 16),
+          _buildSuggestionCard(),
+          const SizedBox(height: 16),
+          IrrigationControlCard(
+            onValveToggled: (isOpen) {
+              if(mounted) {
+                setState(() {
+                  _isValveOpen = isOpen;
+                });
               }
-            }
+            },
+          ),
+          const SizedBox(height: 16),
+          WaterTankCard(waterLevel: _waterLevel, tankCapacity: 1000),
+          const SizedBox(height: 16),
+          _buildSensorCard(
+            icon: Icons.opacity,
+            title: 'Soil Moisture',
+            value: '${_simulatedSoilMoisture.toStringAsFixed(1)}%',
+            color: Colors.blue,
+          ),
+          const SizedBox(height: 16),
+          _buildSensorCard(
+            icon: Icons.thermostat,
+            title: 'Temperature & Humidity',
+            value: '$_temperature°C / $_humidity%',
+            color: Colors.orange,
+          ),
+          const SizedBox(height: 16),
+          _buildStatusCard(_status),
+          const SizedBox(height: 16),
+          _buildWeatherCard(),
+        ],
+      ),
+    );
+  }
 
-            return ListView(
-              padding: const EdgeInsets.all(16.0),
-              children: [
-                if (crops != null) _buildCropSelector(crops),
-                const SizedBox(height: 16),
-                _buildSuggestionCard(),
-                const SizedBox(height: 16),
-                IrrigationControlCard(
-                  onValveToggled: (isOpen) {
-                    setState(() {
-                      _isValveOpen = isOpen;
-                    });
-                  },
-                ),
-                const SizedBox(height: 16),
-                WaterTankCard(waterLevel: waterLevel, tankCapacity: 1000),
-                const SizedBox(height: 16),
-                _buildSensorCard(
-                  icon: Icons.opacity,
-                  title: 'Soil Moisture',
-                  value: '${_simulatedSoilMoisture.toStringAsFixed(1)}%',
-                  color: Colors.blue,
-                ),
-                const SizedBox(height: 16),
-                _buildSensorCard(
-                  icon: Icons.thermostat,
-                  title: 'Temperature & Humidity',
-                  value:
-                      '${sensors['Temperature']}°C / ${sensors['Humidity']}%',
-                  color: Colors.orange,
-                ),
-                const SizedBox(height: 16),
-                _buildStatusCard(sensors['status'] ?? 'N/A'),
-                const SizedBox(height: 16),
-                _buildWeatherCard(),
-              ],
+  Widget _buildCropSelector(Map<dynamic, dynamic> crops) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+        child: DropdownButton<String>(
+          hint: const Text('Select a crop'),
+          value: _selectedCrop,
+          isExpanded: true,
+          underline: const SizedBox.shrink(),
+          items: crops.keys.map<DropdownMenuItem<String>>((key) {
+            return DropdownMenuItem<String>(
+              value: key as String,
+              child: Text(key),
             );
-          } else if (snapshot.hasError) {
-            return Center(child: Text("Error: ${snapshot.error}"));
-          } else {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Text('No data available.'),
-                ],
-              ),
-            );
-          }
-        },
+          }).toList(),
+          onChanged: (newValue) {
+            if(mounted) {
+              setState(() {
+                _selectedCrop = newValue;
+              });
+            }
+          },
+        ),
       ),
     );
   }
@@ -253,25 +285,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
     );
   }
-  
-  Widget _buildCropSelector(Map<dynamic, dynamic> crops) {
-    return DropdownButtonFormField<String>(
-      value: _selectedCrop,
-      hint: const Text("Select a crop"),
-      onChanged: (String? newValue) {
-        setState(() {
-          _selectedCrop = newValue;
-        });
-      },
-      items: crops.keys.map<DropdownMenuItem<String>>((key) {
-        return DropdownMenuItem<String>(
-          value: key,
-          child: Text(key),
-        );
-      }).toList(),
-    );
-  }
-  
+
   Widget _buildSensorCard({
     required IconData icon,
     required String title,
@@ -279,37 +293,108 @@ class _DashboardScreenState extends State<DashboardScreen> {
     required Color color,
   }) {
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      child: ListTile(
-        leading: Icon(icon, color: color, size: 40),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(value, style: const TextStyle(fontSize: 18)),
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          children: [
+            Icon(icon, size: 40, color: color),
+            const SizedBox(width: 16),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildStatusCard(String status) {
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      child: ListTile(
-        leading: const Icon(Icons.info_outline, color: Colors.blueGrey),
-        title: const Text('System Status', style: TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text(status, style: const TextStyle(fontSize: 18)),
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: Colors.yellow[100],
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          children: [
+            const Icon(Icons.info_outline, size: 40, color: Colors.amber),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                status,
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildWeatherCard() {
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      child: const ListTile(
-        leading: Icon(Icons.wb_sunny, color: Colors.yellow),
-        title: Text('Weather Forecast', style: TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text('Sunny, 28°C', style: TextStyle(fontSize: 18)),
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Weather Forecast',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildWeatherDay('Mon', Icons.wb_sunny, '30°'),
+                _buildWeatherDay('Tue', Icons.cloud, '28°'),
+                _buildWeatherDay('Wed', Icons.grain, '26°'),
+              ],
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  static Widget _buildWeatherDay(String day, IconData icon, String temp) {
+    return Column(
+      children: [
+        Text(day, style: const TextStyle(fontWeight: FontWeight.bold)),
+        const SizedBox(height: 4),
+        Icon(icon, color: Colors.grey[700]),
+        const SizedBox(height: 4),
+        Text(temp),
+      ],
+    );
+  }
+
+  @override
+  void dispose() {
+    _sensorSubscription?.cancel();
+    _simulationTimer?.cancel();
+    super.dispose();
   }
 }

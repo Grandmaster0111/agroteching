@@ -38,14 +38,20 @@ class _IrrigationControlCardState extends State<IrrigationControlCard> {
   }
 
   Future<void> _showTimerDialog() async {
+    // First, show the time picker and await the result.
     final TimeOfDay? picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
     );
+
+    // After the await, check if the widget is still mounted before using the context.
+    if (!mounted) return;
+
     if (picked != null) {
+      // Now it's safe to use the BuildContext.
       _database.child('system/timer').set(picked.format(context));
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Irrigation scheduled for ${picked.format(context)}')),
+        SnackBar(content: Text('Irrigation scheduled for ${picked.format(context)}')),      
       );
     }
   }

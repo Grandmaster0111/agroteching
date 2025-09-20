@@ -2,8 +2,13 @@ import 'package:flutter/material.dart';
 
 class WaterTankCard extends StatelessWidget {
   final num waterLevel;
+  final int tankCapacity;
 
-  const WaterTankCard({super.key, required this.waterLevel});
+  const WaterTankCard({
+    super.key,
+    required this.waterLevel,
+    this.tankCapacity = 1000, // Default to 1000L
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +35,7 @@ class WaterTankCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Water Tank Level',
+              'Water Tank Level (${tankCapacity}L)', // Display capacity
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 16),

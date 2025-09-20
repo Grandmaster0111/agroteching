@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/material.dart';
@@ -17,7 +18,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final DatabaseReference _database = FirebaseDatabase.instanceFor(
     app: FirebaseDatabase.instance.app,
-    databaseURL: "https://agrotech-2c731-default-rtdb.firebaseio.com/",
+    databaseURL: "https://agrosmart-f1233-default-rtdb.asia-southeast1.firebasedatabase.app/",
   ).ref();
 
   late StreamSubscription<DatabaseEvent> _sensorSubscription;
@@ -26,22 +27,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _selectedCrop;
   String _irrigationSuggestion = "Select a crop to get a suggestion.";
 
+  // Simulation variables
+  Timer? _simulationTimer;
+  double _simulatedSoilMoisture = 70.0;
+  bool _isValveOpen = false;
+
   @override
   void initState() {
     super.initState();
     _checkAndCreateCropsData();
     _listenToSensorData();
+    _startSimulation();
+  }
+
+  void _startSimulation() {
+    _simulationTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      setState(() {
+        if (_isValveOpen) {
+          _simulatedSoilMoisture = min(100, _simulatedSoilMoisture + 2);
+        } else {
+          _simulatedSoilMoisture = max(0, _simulatedSoilMoisture - 1);
+        }
+      });
+    });
   }
 
   void _listenToSensorData() {
-    _sensorSubscription = _database.child('sensors').onValue.listen((event) {
+    _sensorSubscription = _database.child('SensorData').onValue.listen((event) {
       final data = event.snapshot.value as Map<dynamic, dynamic>?;
       if (data != null) {
-        final waterLevel = data['water_tank_level'] ?? 0;
+        final distance = data['Distance'] ?? 0;
+        final double waterLevel = (1.0 - (distance / 30.0)).clamp(0.0, 1.0) * 100.0;
+
         if (waterLevel < 20) {
           _notificationService.showNotification(
             'Low Water Level',
-            'Water tank level is critically low: $waterLevel%',
+            'Water tank level is critically low: ${waterLevel.toStringAsFixed(1)}%',
           );
         }
       }
@@ -102,7 +123,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             final data =
                 snapshot.data!.snapshot.value as Map<dynamic, dynamic>;
             final crops = data['crops'] as Map<dynamic, dynamic>?;
-            final sensors = data['sensors'] as Map<dynamic, dynamic>?;
+            final sensors = data['SensorData'] as Map<dynamic, dynamic>?;
 
             if (sensors == null) {
               return const Center(
@@ -110,6 +131,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     "Waiting for sensor data... Ensure your device is connected."),
               );
             }
+
+            final distance = sensors['Distance'] ?? 0;
+            final double waterLevel = (1.0 - (distance / 30.0)).clamp(0.0, 1.0) * 100.0;
 
             if (crops != null && _selectedCrop != null) {
               final selectedCropData =
@@ -126,14 +150,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 16),
                 _buildSuggestionCard(),
                 const SizedBox(height: 16),
-                const IrrigationControlCard(),
+                IrrigationControlCard(
+                  onValveToggled: (isOpen) {
+                    setState(() {
+                      _isValveOpen = isOpen;
+                    });
+                  },
+                ),
                 const SizedBox(height: 16),
-                WaterTankCard(waterLevel: sensors['water_tank_level'] ?? 0),
+                WaterTankCard(waterLevel: waterLevel, tankCapacity: 1000),
                 const SizedBox(height: 16),
                 _buildSensorCard(
                   icon: Icons.opacity,
                   title: 'Soil Moisture',
-                  value: '${sensors['soil_moisture']}%',
+                  value: '${_simulatedSoilMoisture.toStringAsFixed(1)}%',
                   color: Colors.blue,
                 ),
                 const SizedBox(height: 16),
@@ -141,7 +171,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   icon: Icons.thermostat,
                   title: 'Temperature & Humidity',
                   value:
-                      '${sensors['temperature']}°C / ${sensors['humidity']}%',
+                      '${sensors['Temperature']}°C / ${sensors['Humidity']}%',
                   color: Colors.orange,
                 ),
                 const SizedBox(height: 16),
@@ -196,10 +226,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   void _getIrrigationSuggestion(
       Map<dynamic, dynamic> sensors, Map<dynamic, dynamic> crop) {
-    final moisture = sensors['soil_moisture'];
-    final temp = sensors['temperature'];
+    final moisture = _simulatedSoilMoisture;
+    final temp = sensors['Temperature'];
 
-    if (moisture is! num || temp is! num) {
+    if (temp is! num) {
       _irrigationSuggestion = "Waiting for valid sensor data.";
       return;
     }
@@ -357,6 +387,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void dispose() {
     _sensorSubscription.cancel();
+    _simulationTimer?.cancel();
     super.dispose();
   }
 }

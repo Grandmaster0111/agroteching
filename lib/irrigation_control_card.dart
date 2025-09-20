@@ -42,6 +42,7 @@ class _IrrigationControlCardState extends State<IrrigationControlCard> {
       context: context,
       initialTime: TimeOfDay.now(),
     );
+    if (!mounted) return;
     if (picked != null) {
       _database.child('system/timer').set(picked.format(context));
       ScaffoldMessenger.of(context).showSnackBar(

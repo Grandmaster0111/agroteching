@@ -11,7 +11,8 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  await NotificationService().init();
+  final notificationService = NotificationService();
+  await notificationService.init();
   runApp(
     ChangeNotifierProvider(
       create: (context) => ThemeProvider(),
@@ -44,16 +45,17 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const Color primarySeedColor = Colors.deepPurple;
+    const Color primarySeedColor = Color(0xFF2C6B4A);
 
     // Define a common TextTheme
     final TextTheme appTextTheme = TextTheme(
-      displayLarge: GoogleFonts.oswald(
+      displayLarge: GoogleFonts.poppins(
         fontSize: 57,
         fontWeight: FontWeight.bold,
       ),
-      titleLarge: GoogleFonts.roboto(fontSize: 22, fontWeight: FontWeight.w500),
-      bodyMedium: GoogleFonts.openSans(fontSize: 14),
+      titleLarge: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.w600),
+      bodyMedium: GoogleFonts.poppins(fontSize: 14),
+      bodySmall: GoogleFonts.poppins(fontSize: 12, color: Colors.grey[600]),
     );
 
     // Light Theme
@@ -67,7 +69,7 @@ class MyApp extends StatelessWidget {
       appBarTheme: AppBarTheme(
         backgroundColor: primarySeedColor,
         foregroundColor: Colors.white,
-        titleTextStyle: GoogleFonts.oswald(
+        titleTextStyle: GoogleFonts.poppins(
           fontSize: 24,
           fontWeight: FontWeight.bold,
         ),
@@ -78,7 +80,7 @@ class MyApp extends StatelessWidget {
           backgroundColor: primarySeedColor,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          textStyle: GoogleFonts.roboto(
+          textStyle: GoogleFonts.poppins(
             fontSize: 16,
             fontWeight: FontWeight.w500,
           ),
@@ -97,7 +99,7 @@ class MyApp extends StatelessWidget {
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.grey[900],
         foregroundColor: Colors.white,
-        titleTextStyle: GoogleFonts.oswald(
+        titleTextStyle: GoogleFonts.poppins(
           fontSize: 24,
           fontWeight: FontWeight.bold,
         ),
@@ -105,10 +107,10 @@ class MyApp extends StatelessWidget {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           foregroundColor: Colors.black,
-          backgroundColor: Colors.deepPurple.shade200,
+          backgroundColor: primarySeedColor.withAlpha(204),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-          textStyle: GoogleFonts.roboto(
+          textStyle: GoogleFonts.poppins(
             fontSize: 16,
             fontWeight: FontWeight.w500,
           ),
@@ -119,7 +121,7 @@ class MyApp extends StatelessWidget {
     return Consumer<ThemeProvider>(
       builder: (context, themeProvider, child) {
         return MaterialApp(
-          title: 'Smart Irrigation Dashboard',
+          title: 'AgroTech Dashboard',
           theme: lightTheme,
           darkTheme: darkTheme,
           themeMode: themeProvider.themeMode,

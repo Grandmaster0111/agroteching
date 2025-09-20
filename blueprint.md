@@ -6,25 +6,26 @@ This document outlines the development plan and features for the AgroTech applic
 
 ## Current State
 
-The application is a basic Flutter app that successfully builds and runs on Android. It includes the `flutter_local_notifications` package, and the initial setup for Firebase is in place.
+The application now features a modern and visually appealing dashboard that connects to a Firebase Realtime Database. The dashboard displays live data for temperature, humidity, and water tank level. The app is also configured to receive push notifications for critical alerts.
 
-## Plan for a Visually Appealing and Modern UI
+### Key Features Implemented:
 
-My next steps are to transform the default Flutter counter app into a visually stunning and modern application. I will focus on the following areas:
+*   **Modern UI:** A redesigned dashboard with a clean layout, informative cards, and custom icons.
+*   **Material 3 Theming:** A sophisticated theming system with a custom color palette and typography using `google_fonts`.
+*   **Light/Dark Mode:** A theme provider that allows users to switch between light and dark modes.
+*   **Firebase Realtime Database Integration:** The application is connected to a Firebase Realtime Database to display live sensor data.
+*   **Live Data Display:** The dashboard displays real-time data for:
+    *   Temperature
+    *   Humidity
+    *   Water Tank Level (calculated from a distance sensor)
+*   **Push Notifications:** The app is configured to receive push notifications from Firebase Cloud Messaging. It requests notification permissions, obtains an FCM token, and saves it to Firestore. This enables the backend to send targeted notifications to the device.
 
-1.  **Theming:**
-    *   Implement a Material 3 theme with a custom color scheme derived from a seed color.
-    *   Integrate the `google_fonts` package to use custom, professional-looking fonts for typography.
-    *   Create a theme provider to allow users to switch between light and dark modes.
+## Plan for Future Enhancements
 
-2.  **UI/UX Enhancements:**
-    *   Redesign the main screen with a more engaging and visually balanced layout.
-    *   Incorporate modern UI elements like cards with subtle drop shadows to create a sense of depth.
-    *   Use a consistent and aesthetically pleasing color palette.
+My next steps will focus on adding more advanced features and improving the user experience. Here are some of the planned enhancements:
 
-3.  **Code Quality and Structure:**
-    *   Refactor the code to follow best practices for separation of concerns.
-    *   Introduce the `provider` package for state management, starting with the theme provider.
-    *   Ensure the code is clean, readable, and well-documented.
-
-This initial phase will set the stage for adding more advanced features to the AgroTech app. I will start by implementing the theming and UI enhancements.
+*   **Data Visualization:** Implement charts and graphs to visualize historical sensor data.
+*   **User Authentication:** Add user authentication to personalize the app experience and secure user data.
+*   **Device Control:** Allow users to control their smart irrigation devices directly from the app.
+*   **Crop Management:** Add features for managing crop cycles, tracking growth, and optimizing irrigation schedules.
+*   **Pest and Disease Detection:** Integrate a machine learning model to detect pests and diseases from images.
